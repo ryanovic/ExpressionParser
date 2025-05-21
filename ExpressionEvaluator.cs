@@ -133,11 +133,16 @@ namespace ExpressionParser
 
         private ref int PopRef(bool create)
         {
+            if (evaluationStack.Count == 0)
+            {
+                throw new InvalidOperationException("Invalid expression. More operands are expected.");
+            }
+
             var tmp = evaluationStack.Pop();
 
             if (tmp.Variable == null)
             {
-                throw new InvalidOperationException("LValue is expected.");
+                throw new InvalidOperationException("Invalid expression. Variable is expected.");
             }
 
             return ref create
@@ -153,6 +158,11 @@ namespace ExpressionParser
 
         private int Pop()
         {
+            if (evaluationStack.Count == 0)
+            {
+                throw new InvalidOperationException("Invalid expression. More operands are expected.");
+            }
+
             var tmp = evaluationStack.Pop();
             return tmp.Variable == null ? tmp.Value : GetVariableRef(tmp.Variable);
         }

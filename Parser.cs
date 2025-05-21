@@ -191,7 +191,7 @@
         {
             if (token == Token.CloseGroup)
             {
-                Reduce(Token.OpenGroup);
+                Pop(Token.OpenGroup); // reduce to the nearest '('.
                 return;
             }
 
@@ -200,31 +200,31 @@
             switch (op.Order)
             {
                 case OperatorOrder.Postfix:
-                    operators.Push(op);
+                    reducer.Reduce(op.Code); // highest precedence.
                     break;
                 case OperatorOrder.Additive:
                 case OperatorOrder.Multiplicative:
                 case OperatorOrder.Equality:
-                    Reduce(op.Order);
+                    Pop(op.Order); // reduce all pending operations with higher precedence.
                     operators.Push(op);
                     this.pendingOperator = false;
                     break;
                 case OperatorOrder.Conditional:
                     if (token == Token.Condition)
                     {
-                        Reduce(OperatorOrder.Conditional - 1);
+                        Pop(OperatorOrder.Conditional - 1); // because ?: is right associative.
                         operators.Push(new Operator(token, OperatorOrder.Max, OperationCode.None));
                     }
                     else
                     {
-                        Reduce(Token.Condition);
+                        Pop(Token.Condition);
                         operators.Push(new Operator(token, OperatorOrder.Conditional, OperationCode.Switch));
                     }
 
                     this.pendingOperator = false;
                     break;
                 case OperatorOrder.Assignment:
-                    Reduce(op.Order - 1);
+                    Pop(op.Order - 1); // because all assigments are right associative as well.
                     operators.Push(op);
                     this.pendingOperator = false;
                     break;
@@ -265,22 +265,22 @@
             _ => throw new NotImplementedException()
         };
 
-        private void Reduce(Token sentinel)
+        private void Pop(Token stop)
         {
-            while (operators.TryPeek(out var top) && top.Token != sentinel)
+            while (operators.TryPeek(out var top) && top.Token != stop)
             {
                 reducer.Reduce(operators.Pop().Code);
             }
 
             if (operators.Count == 0)
             {
-                throw new InvalidOperationException($"Invalid expression. {sentinel} token expected on the stack.");
+                throw new InvalidOperationException($"Invalid expression. {stop} token expected on the stack.");
             }
 
             operators.Pop();
         }
 
-        private void Reduce(OperatorOrder maxOrder)
+        private void Pop(OperatorOrder maxOrder)
         {
             while (operators.TryPeek(out var top) && top.Order <= maxOrder)
             {
@@ -290,7 +290,7 @@
 
         private void Complete()
         {
-            Reduce(OperatorOrder.Max - 1); // reduce anything except '?' and '('.
+            Pop(OperatorOrder.Max - 1); // reduce anything except '?' and '('.
 
             if (operators.Count > 0)
             {
