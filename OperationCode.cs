@@ -2,7 +2,6 @@
 {
     public enum OperationCode
     {
-        None,
         PrefixIncrement,
         PrefixDecrement,
         PostfixIncrement,
@@ -18,7 +17,7 @@
         CompareGreaterEq,
         CompareLess,
         CompareLessEq,
-        Switch,     // ?:
+        Select, // ?: conditional operator.
         Assign,
         AssignAdd,
         AssignSub,

@@ -100,7 +100,7 @@ namespace ExpressionParser
                     (a, b) = Pop2();
                     result = FromBoolean(a <= b);
                     break;
-                case OperationCode.Switch:
+                case OperationCode.Select:
                     (int cond, a, b) = Pop3();
                     result = ToBoolean(cond) ? a : b;
                     break;

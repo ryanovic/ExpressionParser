@@ -2,7 +2,7 @@
 {
     public class Parser
     {
-        private readonly record struct Operator(Token Token, OperatorOrder Order, OperationCode Code);
+        private readonly record struct Operator(Token Token, OperationPrecedence Precedence);
 
         private bool pendingOperator = false;
         private readonly Stack<Operator> operators = new Stack<Operator>();
@@ -53,7 +53,7 @@
                             }
                         }
 
-                        HandleToken(Token.Sub, expression.Slice(i, 1));
+                        HandleToken(Token.Subtract, expression.Slice(i, 1));
                         break;
                     case '/':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
@@ -62,7 +62,7 @@
                             break;
                         }
 
-                        HandleToken(Token.Div, expression.Slice(i, 1));
+                        HandleToken(Token.Divide, expression.Slice(i, 1));
                         break;
                     case '*':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
@@ -71,12 +71,12 @@
                             break;
                         }
 
-                        HandleToken(Token.Mul, expression.Slice(i, 1));
+                        HandleToken(Token.Multiply, expression.Slice(i, 1));
                         break;
                     case '=':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
                         {
-                            HandleToken(Token.Eq, expression.Slice(i++, 2));
+                            HandleToken(Token.Equal, expression.Slice(i++, 2));
                             break;
                         }
 
@@ -85,7 +85,7 @@
                     case '!':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
                         {
-                            HandleToken(Token.Neq, expression.Slice(i++, 2));
+                            HandleToken(Token.NotEqual, expression.Slice(i++, 2));
                             break;
                         }
 
@@ -93,32 +93,32 @@
                     case '>':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
                         {
-                            HandleToken(Token.Gte, expression.Slice(i++, 2));
+                            HandleToken(Token.GreaterEqual, expression.Slice(i++, 2));
                             break;
                         }
 
-                        HandleToken(Token.Gt, expression.Slice(i, 1));
+                        HandleToken(Token.Greater, expression.Slice(i, 1));
                         break;
                     case '<':
                         if (i + 1 < expression.Length && expression[i + 1] == '=')
                         {
-                            HandleToken(Token.Lte, expression.Slice(i++, 2));
+                            HandleToken(Token.LessEqual, expression.Slice(i++, 2));
                             break;
                         }
 
-                        HandleToken(Token.Lt, expression.Slice(i, 1));
+                        HandleToken(Token.Less, expression.Slice(i, 1));
                         break;
                     case '(':
-                        HandleToken(Token.OpenGroup, expression.Slice(i, 1));
+                        HandleToken(Token.GroupBegin, expression.Slice(i, 1));
                         break;
                     case ')':
-                        HandleToken(Token.CloseGroup, expression.Slice(i, 1));
+                        HandleToken(Token.GroupEnd, expression.Slice(i, 1));
                         break;
                     case '?':
-                        HandleToken(Token.Condition, expression.Slice(i, 1));
+                        HandleToken(Token.SelectBegin, expression.Slice(i, 1));
                         break;
                     case ':':
-                        HandleToken(Token.Otherwise, expression.Slice(i, 1));
+                        HandleToken(Token.SelectEnd, expression.Slice(i, 1));
                         break;
                     case char digit when IsDigit(digit):
                         int j = i;
@@ -147,7 +147,7 @@
                 }
             }
 
-            Complete();
+            CompleteAll();
         }
 
         private void HandleToken(Token token, ReadOnlySpan<char> value)
@@ -168,129 +168,111 @@
             {
                 case Token.Variable:
                     reducer.Push(value.ToString());
-                    this.pendingOperator = true;
                     break;
                 case Token.Number:
                     reducer.Push(Int32.Parse(value));
-                    this.pendingOperator = true;
                     break;
                 case Token.Add:
                     break;
-                case Token.Sub:
+                case Token.Subtract:
                 case Token.Increment:
                 case Token.Decrement:
-                case Token.OpenGroup:
-                    operators.Push(CreateOperator(token, prefix: true));
+                    operators.Push(new Operator(token, OperationPrecedence.Prefix));
+                    break;
+                case Token.GroupBegin:
+                    operators.Push(new Operator(token, OperationPrecedence.Partial));
                     break;
                 default:
                     throw new InvalidOperationException($"Unexpected token '{value}' of {token} type.");
             }
+
+            this.pendingOperator = token == Token.Number || token == Token.Variable;
         }
 
         private void HandleOperator(Token token)
         {
-            if (token == Token.CloseGroup)
+            this.pendingOperator = false;
+
+            switch (token)
             {
-                Pop(Token.OpenGroup); // reduce to the nearest '('.
-                return;
-            }
-
-            var op = CreateOperator(token, prefix: false);
-
-            switch (op.Order)
-            {
-                case OperatorOrder.Postfix:
-                    reducer.Reduce(op.Code); // highest precedence.
+                case Token.GroupEnd:
+                    CompletePartialOperation(Token.GroupBegin);
+                    this.pendingOperator = true;
                     break;
-                case OperatorOrder.Additive:
-                case OperatorOrder.Multiplicative:
-                case OperatorOrder.Equality:
-                    Pop(op.Order); // reduce all pending operations with higher precedence.
-                    operators.Push(op);
-                    this.pendingOperator = false;
+                case Token.Increment:
+                case Token.Decrement:
+                    operators.Push(new Operator(token, OperationPrecedence.Postfix));
+                    this.pendingOperator = true;
                     break;
-                case OperatorOrder.Conditional:
-                    if (token == Token.Condition)
-                    {
-                        Pop(OperatorOrder.Conditional - 1); // because ?: is right associative.
-                        operators.Push(new Operator(token, OperatorOrder.Max, OperationCode.None));
-                    }
-                    else
-                    {
-                        Pop(Token.Condition);
-                        operators.Push(new Operator(token, OperatorOrder.Conditional, OperationCode.Switch));
-                    }
-
-                    this.pendingOperator = false;
+                case Token.Multiply:
+                case Token.Divide:
+                    CompleteOperations(OperationPrecedence.Multiplicative);
+                    operators.Push(new Operator(token, OperationPrecedence.Multiplicative));
                     break;
-                case OperatorOrder.Assignment:
-                    Pop(op.Order - 1); // because all assigments are right associative as well.
-                    operators.Push(op);
-                    this.pendingOperator = false;
+                case Token.Add:
+                case Token.Subtract:
+                    CompleteOperations(OperationPrecedence.Additive);
+                    operators.Push(new Operator(token, OperationPrecedence.Additive));
                     break;
+                case Token.Greater:
+                case Token.GreaterEqual:
+                case Token.Less:
+                case Token.LessEqual:
+                    CompleteOperations(OperationPrecedence.Relational);
+                    operators.Push(new Operator(token, OperationPrecedence.Relational));
+                    break;
+                case Token.Equal:
+                case Token.NotEqual:
+                    CompleteOperations(OperationPrecedence.Equality);
+                    operators.Push(new Operator(token, OperationPrecedence.Equality));
+                    break;
+                case Token.SelectBegin: // ?
+                    CompleteOperations(OperationPrecedence.Conditional - 1); // respect right associativity.
+                    operators.Push(new Operator(token, OperationPrecedence.Partial)); // unspecified since is not yet completed.
+                    break;
+                case Token.SelectEnd:   // :
+                    CompletePartialOperation(Token.SelectBegin);
+                    operators.Push(new Operator(token, OperationPrecedence.Conditional));
+                    break;
+                case Token.Assign:
+                case Token.AssignAdd:
+                case Token.AssignSub:
+                case Token.AssignDiv:
+                case Token.AssignMul:
+                    CompleteOperations(OperationPrecedence.Assignment - 1); // respect right associativity.
+                    operators.Push(new Operator(token, OperationPrecedence.Assignment));
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unexpected token '{token}'");
             }
         }
 
-        private Operator CreateOperator(Token token, bool prefix) => token switch
+        private void CompletePartialOperation(Token start)
         {
-            Token.OpenGroup => new Operator(token, OperatorOrder.Max, OperationCode.None),
-            Token.CloseGroup => new Operator(token, OperatorOrder.Max, OperationCode.None),
-            Token.Increment => prefix
-                ? new Operator(token, OperatorOrder.Prefix, OperationCode.PrefixIncrement)
-                : new Operator(token, OperatorOrder.Postfix, OperationCode.PostfixIncrement),
-            Token.Decrement => prefix
-                ? new Operator(token, OperatorOrder.Prefix, OperationCode.PrefixDecrement)
-                : new Operator(token, OperatorOrder.Postfix, OperationCode.PostfixDecrement),
-            Token.Add => prefix
-                ? new Operator(token, OperatorOrder.Prefix, OperationCode.None)
-                : new Operator(token, OperatorOrder.Additive, OperationCode.Add),
-            Token.Sub => prefix
-                ? new Operator(token, OperatorOrder.Prefix, OperationCode.Negate)
-                : new Operator(token, OperatorOrder.Additive, OperationCode.Subtract),
-            Token.Div => new Operator(token, OperatorOrder.Multiplicative, OperationCode.Divide),
-            Token.Mul => new Operator(token, OperatorOrder.Multiplicative, OperationCode.Multiply),
-            Token.Eq => new Operator(token, OperatorOrder.Equality, OperationCode.CompareEq),
-            Token.Neq => new Operator(token, OperatorOrder.Equality, OperationCode.CompareNotEq),
-            Token.Gt => new Operator(token, OperatorOrder.Equality, OperationCode.CompareGreater),
-            Token.Gte => new Operator(token, OperatorOrder.Equality, OperationCode.CompareGreaterEq),
-            Token.Lt => new Operator(token, OperatorOrder.Equality, OperationCode.CompareLess),
-            Token.Lte => new Operator(token, OperatorOrder.Equality, OperationCode.CompareLessEq),
-            Token.Condition => new Operator(token, OperatorOrder.Conditional, OperationCode.Switch),
-            Token.Otherwise => new Operator(token, OperatorOrder.Conditional, OperationCode.Switch),
-            Token.Assign => new Operator(token, OperatorOrder.Assignment, OperationCode.Assign),
-            Token.AssignAdd => new Operator(token, OperatorOrder.Assignment, OperationCode.AssignAdd),
-            Token.AssignSub => new Operator(token, OperatorOrder.Assignment, OperationCode.AssignSub),
-            Token.AssignMul => new Operator(token, OperatorOrder.Assignment, OperationCode.AssignMul),
-            Token.AssignDiv => new Operator(token, OperatorOrder.Assignment, OperationCode.AssignDiv),
-            _ => throw new NotImplementedException()
-        };
-
-        private void Pop(Token stop)
-        {
-            while (operators.TryPeek(out var top) && top.Token != stop)
+            while (operators.TryPeek(out var top) && top.Token != start)
             {
-                reducer.Reduce(operators.Pop().Code);
+                CompleteOperation(operators.Pop());
             }
 
             if (operators.Count == 0)
             {
-                throw new InvalidOperationException($"Invalid expression. {stop} token expected on the stack.");
+                throw new InvalidOperationException($"Invalid expression. {start} token expected on the stack.");
             }
 
             operators.Pop();
         }
 
-        private void Pop(OperatorOrder maxOrder)
+        private void CompleteOperations(OperationPrecedence precedence)
         {
-            while (operators.TryPeek(out var top) && top.Order <= maxOrder)
+            while (operators.TryPeek(out var top) && top.Precedence <= precedence)
             {
-                reducer.Reduce(operators.Pop().Code);
+                CompleteOperation(operators.Pop());
             }
         }
 
-        private void Complete()
+        private void CompleteAll()
         {
-            Pop(OperatorOrder.Max - 1); // reduce anything except '?' and '('.
+            CompleteOperations(OperationPrecedence.Partial - 1); // reduce anything except '?' and '('.
 
             if (operators.Count > 0)
             {
@@ -299,6 +281,31 @@
             }
         }
 
+        private void CompleteOperation(Operator op)
+        {
+            reducer.Reduce(op.Token switch
+            {
+                Token.Increment => op.Precedence == OperationPrecedence.Prefix ? OperationCode.PrefixIncrement : OperationCode.PostfixIncrement,
+                Token.Decrement => op.Precedence == OperationPrecedence.Prefix ? OperationCode.PrefixDecrement : OperationCode.PostfixDecrement,
+                Token.Add => OperationCode.Add,
+                Token.Subtract => op.Precedence == OperationPrecedence.Prefix ? OperationCode.Negate : OperationCode.Subtract,
+                Token.Divide => OperationCode.Divide,
+                Token.Multiply => OperationCode.Multiply,
+                Token.Equal => OperationCode.CompareEq,
+                Token.NotEqual => OperationCode.CompareNotEq,
+                Token.Greater => OperationCode.CompareGreater,
+                Token.GreaterEqual => OperationCode.CompareGreaterEq,
+                Token.Less => OperationCode.CompareLess,
+                Token.LessEqual => OperationCode.CompareLessEq,
+                Token.SelectEnd => OperationCode.Select,
+                Token.Assign => OperationCode.Assign,
+                Token.AssignAdd => OperationCode.AssignAdd,
+                Token.AssignSub => OperationCode.AssignSub,
+                Token.AssignMul => OperationCode.AssignMul,
+                Token.AssignDiv => OperationCode.AssignDiv,
+                _ => throw new NotImplementedException(),
+            });
+        }
 
         private static bool IsDigit(char ch) => ch >= '0' && ch <= '9';
         private static bool IsVariable(char ch) => (ch >= 'a' && ch <= 'z') || ch == '_';

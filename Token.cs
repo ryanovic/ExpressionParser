@@ -4,22 +4,22 @@
     {
         Number,
         Variable,
-        OpenGroup,  // (
-        CloseGroup, // )
+        GroupBegin,  // (
+        GroupEnd,    // )
         Increment,
         Decrement,
         Add,
-        Sub,
-        Div,
-        Mul,
-        Eq,
-        Neq,
-        Gt,
-        Gte,
-        Lt,
-        Lte,
-        Condition,     // ?
-        Otherwise, // :
+        Subtract,
+        Divide,
+        Multiply,
+        Equal,
+        NotEqual,
+        Greater,
+        GreaterEqual,
+        Less,
+        LessEqual,
+        SelectBegin,  // ?
+        SelectEnd,    // :
         Assign,
         AssignAdd,
         AssignSub,
