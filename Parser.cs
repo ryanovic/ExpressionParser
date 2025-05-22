@@ -15,139 +15,8 @@
 
         public void Parse(ReadOnlySpan<char> expression)
         {
-            for (int i = 0; i < expression.Length; i++)
-            {
-                switch (expression[i])
-                {
-                    case '+':
-                        if (i + 1 < expression.Length)
-                        {
-                            if (expression[i + 1] == '+')
-                            {
-                                HandleToken(Token.Increment, expression.Slice(i++, 2));
-                                break;
-                            }
-
-                            if (expression[i + 1] == '=')
-                            {
-                                HandleToken(Token.AssignAdd, expression.Slice(i++, 2));
-                                break;
-                            }
-                        }
-
-                        HandleToken(Token.Add, expression.Slice(i, 1));
-                        break;
-                    case '-':
-                        if (i + 1 < expression.Length)
-                        {
-                            if (expression[i + 1] == '-')
-                            {
-                                HandleToken(Token.Decrement, expression.Slice(i++, 2));
-                                break;
-                            }
-
-                            if (expression[i + 1] == '=')
-                            {
-                                HandleToken(Token.AssignSub, expression.Slice(i++, 2));
-                                break;
-                            }
-                        }
-
-                        HandleToken(Token.Subtract, expression.Slice(i, 1));
-                        break;
-                    case '/':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.AssignDiv, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        HandleToken(Token.Divide, expression.Slice(i, 1));
-                        break;
-                    case '*':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.AssignMul, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        HandleToken(Token.Multiply, expression.Slice(i, 1));
-                        break;
-                    case '=':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.Equal, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        HandleToken(Token.Assign, expression.Slice(i, 1));
-                        break;
-                    case '!':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.NotEqual, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        throw new InvalidOperationException($"Unexpected character '{expression[i]}' at {i} position.");
-                    case '>':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.GreaterEqual, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        HandleToken(Token.Greater, expression.Slice(i, 1));
-                        break;
-                    case '<':
-                        if (i + 1 < expression.Length && expression[i + 1] == '=')
-                        {
-                            HandleToken(Token.LessEqual, expression.Slice(i++, 2));
-                            break;
-                        }
-
-                        HandleToken(Token.Less, expression.Slice(i, 1));
-                        break;
-                    case '(':
-                        HandleToken(Token.GroupBegin, expression.Slice(i, 1));
-                        break;
-                    case ')':
-                        HandleToken(Token.GroupEnd, expression.Slice(i, 1));
-                        break;
-                    case '?':
-                        HandleToken(Token.SelectBegin, expression.Slice(i, 1));
-                        break;
-                    case ':':
-                        HandleToken(Token.SelectEnd, expression.Slice(i, 1));
-                        break;
-                    case char digit when IsDigit(digit):
-                        int j = i;
-
-                        while (i + 1 < expression.Length && IsDigit(expression[i + 1]))
-                        {
-                            i++;
-                        }
-
-                        HandleToken(Token.Number, expression.Slice(j, i - j + 1));
-                        break;
-                    case char alpha when IsVariable(alpha):
-                        int k = i;
-
-                        while (i + 1 < expression.Length && IsVariable(expression[i + 1]))
-                        {
-                            i++;
-                        }
-
-                        HandleToken(Token.Variable, expression.Slice(k, i - k + 1));
-                        break;
-                    case char ws when Char.IsWhiteSpace(ws):
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Unexpected character '{expression[i]}' at {i} position.");
-                }
-            }
-
-            CompleteAll();
+            Tokenizer.Tokenize(expression, HandleToken);
+            CompletePendingOperations();
         }
 
         private void HandleToken(Token token, ReadOnlySpan<char> value)
@@ -270,7 +139,7 @@
             }
         }
 
-        private void CompleteAll()
+        private void CompletePendingOperations()
         {
             CompleteOperations(OperationPrecedence.Partial - 1); // reduce anything except '?' and '('.
 
@@ -306,8 +175,5 @@
                 _ => throw new NotImplementedException(),
             });
         }
-
-        private static bool IsDigit(char ch) => ch >= '0' && ch <= '9';
-        private static bool IsVariable(char ch) => (ch >= 'a' && ch <= 'z') || ch == '_';
     }
 }
