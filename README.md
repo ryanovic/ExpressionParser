@@ -1,13 +1,21 @@
-Sample implementation of [operator-precedence expression parser](https://en.wikipedia.org/wiki/Operator-precedence_parser). The following lexemes and operations are supported:
+## Description
 
-- **Numbers**:               One or more '0'-'9' characters.Limited  to 32 bit integer values.
-- **Variables**:             One or more 'a'-'z' and '_' characters.
-- **Grouping**:              ((x + y) * z)
-- **Postfix**:               x++, x--
-- **Prefix**:                -x, --x, ++x
-- **Multiplicative**:        x * y, x / y
-- **Additive**:              x + y, x - y
-- **Relational**:            x > y, x < y, x >= y, x <= y
-- **Equality**:              x == y, x != y
-- **Conditional**:           Ternary ?: operator. Expression that evaluates to a positive integer will be considered a true condition.
-- **Assignment**:            x = y, x += y, x -= y, x *= y, x /= y
+Sample implementation of [operator-precedence expression parser](https://en.wikipedia.org/wiki/Operator-precedence_parser). Parser supports basic operations(addition, comparison, asssigment, etc...), variables(lower case english alphabet) and integers. Expressions are read from the console - row by row. Variables state is shared between expressions:
+
+```
+Please, enter the expression:
+a = 3
+Result: 3
+b = 4
+Result: 4
+a + b
+Result: 7
+```
+## Implementation notes
+
+- There are two global states - **operator pending** and **operand pending**
+- '+', '++', '-', '--' are treated according to the global state to distinquish postfix and prefix operators.
+- Each operator is handled in two steps. First, it reads and completes all lower or with the same priority operators are currently on the stack, then put the pending one on the top.
+- Right assiciative operators only reduce operators with lower priority to maintain right to left evaluation order.
+- '(' has a special(the lowest) precedence, so it can't be reduced by any other operator execpt ')'.
+- Trinary('?:') operator is handled as a special case. When '?' encountered it reduces the stack according to the general rules(for right associativity operators), then pushed with 'partial'(lowest) priority. Then the following ':' token reduces all operations between '?' and the current point, and replaces former with the expected 'conditional' priority operation.
